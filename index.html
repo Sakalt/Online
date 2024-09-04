@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>オンラインバトルゲーム</title>
+    <style>
+        /* CSSスタイル */
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+        }
+
+        #gameCanvas {
+            border: 2px solid #fff;
+            margin-top: 10px;
+        }
+
+        #scoreboard {
+            background-color: #222;
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px;
+        }
+
+        #chatContainer {
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #chatMessages {
+            max-height: 150px;
+            overflow-y: auto;
+            margin-bottom: 5px;
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #controls button {
+            margin: 5px;
+            width: 50px;
+            height: 50px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <!-- ゲームキャンバス -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- スコアボード -->
+    <div id="scoreboard">
+        <h2>スコアボード</h2>
+        <ul id="scoreList"></ul>
+    </div>
+
+    <!-- チャットウィンドウ -->
+    <div id="chatContainer">
+        <div id="chatMessages"></div>
+        <input type="text" id="chatInput" placeholder="メッセージを入力..." />
+        <button onclick="sendMessage()">送信</button>
+    </div>
+
+    <!-- モバイル用コントロールボタン -->
+    <div id="controls">
+        <button id="up" onclick="move('up')">↑</button>
+        <button id="left" onclick="move('left')">←</button>
+        <button id="right" onclick="move('right')">→</button>
+        <button id="down" onclick="move('down')">↓</button>
+    </div>
+
+    <script>
+        // JavaScriptコード
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 800;
+        canvas.height = 600;
+
+        const socket = new WebSocket('ws://localhost:3000');
+
+        // プレイヤーの初期状態
+        let player = {
+            id: null,
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            hp: 100,
+            color: '#' + Math.floor(Math.random()*16777215).toString(16),
+        };
+
+        // 他のプレイヤーを追跡
+        const players = {};
+        const bullets = [];
+
+        // サーバーからメッセージを受信
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'init') {
+                player.id = data.id;
+            } else if (data.type === 'update') {
+                players[data.id] = data.player;
+            } else if (data.type === 'remove') {
+                delete players[data.id];
+            } else if (data.type === 'chat') {
+                const chatMessages = document.getElementById('chatMessages');
+                chatMessages.innerHTML += `<p>${data.message}</p>`;
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        };
+
+        // プレイヤーの移動をハンドル
+        function move(direction) {
+            if (direction === 'up') player.y -= 5;
+            if (direction === 'down') player.y += 5;
+            if (direction === 'left') player.x -= 5;
+            if (direction === 'right') player.x += 5;
+            socket.send(JSON.stringify({ type: 'move', player }));
+        }
+
+        // チャットメッセージを送信
+        function sendMessage() {
+            const chatInput = document.getElementById('chatInput');
+            const message = chatInput.value;
+            socket.send(JSON.stringify({ type: 'chat', message }));
+            chatInput.value = '';
+        }
+
+        // ゲームループ
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 他のプレイヤーを描画
+            for (let id in players) {
+                const p = players[id];
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 20, 20);
+            }
+
+            // 自分のプレイヤーを描画
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, 20, 20);
+
+            // スコアボードを更新
+            const scoreList = document.getElementById('scoreList');
+            scoreList.innerHTML = Object.keys(players).map(id => `<li>${id}: ${players[id].hp} HP</li>`).join('');
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
